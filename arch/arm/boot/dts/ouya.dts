@@ -1,0 +1,252 @@
+/dts-v1/;
+
+#include "tegra30-cardhu.dtsi"
+#include "include/dt-bindings/thermal/thermal.h"
+
+/ {
+	model = "Ouya";
+	compatible = "ouya", "nvidia,cardhu", "nvidia,tegra30";
+
+	/* Already disabled */
+	/delete-node/ usb@7d000000;
+	/delete-node/ usb-phy@7d000000;
+
+	/* Explicitly disabled */
+	/delete-node/ pcie-controller@00003000;
+	/delete-node/ i2c@7000c000; /* panelddc */
+	/delete-node/ panel;
+	/delete-node/ backlight;
+
+	/* FIXME: broken */
+	/delete-node/ cache-controller@50043000;
+
+	aliases {
+		serial0 = &uarta;
+		serial1 = &uartb;
+		serial2 = &uartc;
+		serial3 = &uartd;
+		serial4 = &uarte;
+	};
+
+	memory {
+		reg = <0x80000000 0x3fe00000>;
+	};
+
+	firmware {
+		trusted-foundations {
+			compatible = "tlm,trusted-foundations";
+			/* FIXME: Version uncertain, but ignored as of Linux 4.3 anyway. */
+			tlm,version-major = <6>;
+			tlm,version-minor = <0>;
+		};
+	};
+
+	host1x@50000000 {
+		dc@54200000 {
+			rgb {
+				status = "disabled";
+				/delete-property/ nvidia,panel;
+			};
+		};
+
+		hdmi@54280000 {
+			status = "okay";
+		};
+	};
+
+	gpio: gpio@6000d000 {
+		gpio-ranges = <&pinmux 0 0 248>;
+	};
+
+	serial@70006000 {
+		compatible = "nvidia,tegra30-hsuart";
+		status = "okay";
+	};
+
+	serial@70006040 {
+		compatible = "nvidia,tegra30-hsuart";
+		status = "okay";
+	};
+
+	serial@70006200 {
+		compatible = "nvidia,tegra30-hsuart";
+		status = "okay";
+	};
+
+	serial@70006300 {
+		compatible = "nvidia,tegra30-hsuart";
+		status = "okay";
+	};
+
+	serial@70006400 {
+		compatible = "nvidia,tegra30-hsuart";
+		status = "okay";
+	};
+
+	pmc@7000e400 {
+		nvidia,suspend-mode = <0>;
+		nvidia,lp0-vec = <0xbddf9000 8192>;
+	};
+
+	sdhci@78000400 {
+		status = "okay";
+		bus-width = <4>;
+		keep-power-in-suspend;
+	};
+
+	usb@7d004000 {
+		status = "okay";
+	};
+
+	usb-phy@7d004000 {
+		nvidia,hssync-start-delay = <0>;
+		nvidia,xcvr-setup = <15>;
+		nvidia,xcvr-hsslew = <8>;
+		nvidia,hsdiscon-level = <1>;
+		status = "okay";
+	};
+
+	usb-phy@7d008000 {
+		nvidia,xcvr-setup = <8>;
+		nvidia,xcvr-hsslew = <8>;
+		nvidia,hsdiscon-level = <1>;
+	};
+
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ddr_reg: regulator@100 {
+			compatible = "regulator-fixed";
+			reg = <100>;
+			regulator-name = "vdd_ddr";
+			regulator-min-microvolt = <1500000>;
+			regulator-max-microvolt = <1500000>;
+			regulator-always-on;
+			regulator-boot-on;
+			enable-active-high;
+			gpio = <&pmic 7 GPIO_ACTIVE_HIGH>;
+		};
+
+		sys_3v3_reg: regulator@101 {
+			compatible = "regulator-fixed";
+			reg = <101>;
+			regulator-name = "sys_3v3";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			regulator-always-on;
+			regulator-boot-on;
+			enable-active-high;
+			gpio = <&pmic 6 GPIO_ACTIVE_HIGH>;
+		};
+
+		usb1_vbus_reg: regulator@102 {
+			compatible = "regulator-fixed";
+			reg = <102>;
+			regulator-name = "usb1_vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			enable-active-high;
+			gpio = <&gpio TEGRA_GPIO(DD, 6) GPIO_ACTIVE_HIGH>;
+			gpio-open-drain;
+			vin-supply = <&vdd_5v0_reg>;
+		};
+
+		usb3_vbus_reg: regulator@103 {
+			compatible = "regulator-fixed";
+			reg = <103>;
+			regulator-name = "usb3_vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			enable-active-high;
+			gpio = <&gpio TEGRA_GPIO(DD, 4) GPIO_ACTIVE_HIGH>;
+			gpio-open-drain;
+			vin-supply = <&vdd_5v0_reg>;
+		};
+
+		vdd_5v0_reg: regulator@104 {
+			compatible = "regulator-fixed";
+			reg = <104>;
+			regulator-name = "5v0";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			enable-active-high;
+			gpio = <&pmic 8 GPIO_ACTIVE_HIGH>;
+		};
+
+		vdd_bl_reg: regulator@105 {
+			compatible = "regulator-fixed";
+			reg = <105>;
+			regulator-name = "vdd_bl";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			regulator-always-on;
+			regulator-boot-on;
+			enable-active-high;
+			gpio = <&gpio TEGRA_GPIO(DD, 2) GPIO_ACTIVE_HIGH>;
+		};
+
+		vdd_bl2_reg: regulator@106 {
+			compatible = "regulator-fixed";
+			reg = <106>;
+			regulator-name = "vdd_bl2";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			regulator-always-on;
+			regulator-boot-on;
+			enable-active-high;
+			gpio = <&gpio TEGRA_GPIO(DD, 0) GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	gpio-keys {
+		power {
+			/delete-property/ interrupt-parent;
+			/delete-property/ interrupts;
+			gpios = <&gpio TEGRA_GPIO(V, 0) GPIO_ACTIVE_LOW>;
+			debounce-interval = <10>;
+		};
+
+		/delete-node/ volume-down;
+		/delete-node/ volume-up;
+	};
+
+	fan: gpio-fan {
+		compatible = "gpio-fan";
+		gpios = <&gpio TEGRA_GPIO(J, 2) GPIO_ACTIVE_HIGH>;
+		gpio-fan,speed-map = <0 0 5000 1>;
+		cooling-min-level = <0>;
+		cooling-max-level = <1>;
+		#cooling-cells = <2>;
+	};
+
+	thermal-zones {
+		cpu_thermal: cpu-thermal {
+			polling-delay-passive = <250>;
+			polling-delay = <1000>;
+
+			thermal-sensors = <&nct1008 1>;
+
+			trips {
+				cpu_alert0: cpu-alert0 {
+					temperature = <60000>;
+					hysteresis = <15000>;
+					type = "active";
+				};
+				cpu_crit: cpu-crit {
+					temperature = <90000>;
+					hysteresis = <3000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_alert0>;
+					cooling-device = <&fan THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+	};
+};

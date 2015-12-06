@@ -44,6 +44,16 @@ config ARCH_TEGRA_3x_SOC
 	  Support for NVIDIA Tegra T30 processor family, based on the
 	  ARM CortexA9MP CPU and the ARM PL310 L2 cache controller
 
+config ARCH_TEGRA_OUYA
+	bool "Enable support for the Ouya"
+	depends on ARCH_TEGRA_3x_SOC
+	help
+	  Support for the Ouya console.
+
+	  Note that the Ouya bootloader does not provide a devicetree, and running
+	  a kernel on Ouya typically involves appending arch/arm/boot/dts/ouya.dtb
+	  to the zImage. In this case, make sure ARM_APPENDED_DTB is also enabled.
+
 config ARCH_TEGRA_114_SOC
 	bool "Enable support for Tegra114 family"
 	select ARM_ERRATA_798181 if SMP
