@@ -179,6 +179,23 @@
 		};
 	};
 
+	gpio-keys {
+		power {
+			interrupt-parent = <>;
+			interrupts = <>;
+			gpios = <&gpio TEGRA_GPIO(V, 0) GPIO_ACTIVE_LOW>;
+			debounce-interval = <10>;
+		};
+
+		volume-down {
+			status = "disabled";
+		};
+
+		volume-up {
+			status = "disabled";
+		};
+	};
+
 	gpio-fan {
 		compatible = "gpio-fan";
 		gpios = <&gpio TEGRA_GPIO(J, 2) GPIO_ACTIVE_HIGH>;
