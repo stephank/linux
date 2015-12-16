@@ -27,8 +27,6 @@
 		};
 	};
 
-	/* FIXME: Enabling this causes a hang during boot.
-	 * Does anything use it, though? */
 	pcie-controller@00003000 {
 		status = "disabled";
 		pci@3,0 {
