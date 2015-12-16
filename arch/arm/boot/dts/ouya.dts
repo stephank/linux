@@ -178,4 +178,11 @@
 			gpio = <&gpio TEGRA_GPIO(DD, 0) GPIO_ACTIVE_HIGH>;
 		};
 	};
+
+	gpio-fan {
+		compatible = "gpio-fan";
+		gpios = <&gpio TEGRA_GPIO(J, 2) GPIO_ACTIVE_HIGH>;
+		gpio-fan,speed-map = <0 0 3000 1>;
+		#cooling-cells = <2>;
+	};
 };
