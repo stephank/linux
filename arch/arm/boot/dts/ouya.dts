@@ -6,6 +6,10 @@
 	model = "Ouya";
 	compatible = "ouya", "nvidia,cardhu", "nvidia,tegra30";
 
+	/delete-node/ pcie-controller@00003000;
+	/delete-node/ i2c@7000c000;
+	/delete-node/ panel;
+
 	aliases {
 		serial0 = &uarta;
 		serial1 = &uartb;
@@ -27,27 +31,17 @@
 		};
 	};
 
-	pcie-controller@00003000 {
-		status = "disabled";
-		pci@3,0 {
-			status = "disabled";
-		};
-	};
-
 	host1x@50000000 {
 		dc@54200000 {
 			rgb {
 				status = "disabled";
+				/delete-property/ nvidia,panel;
 			};
 		};
 
 		hdmi@54280000 {
 			status = "okay";
 		};
-	};
-
-	i2c@7000c000 {
-		status = "disabled";
 	};
 
 	serial@70006000 {
@@ -181,19 +175,14 @@
 
 	gpio-keys {
 		power {
-			interrupt-parent = <>;
-			interrupts = <>;
+			/delete-property/ interrupt-parent;
+			/delete-property/ interrupts;
 			gpios = <&gpio TEGRA_GPIO(V, 0) GPIO_ACTIVE_LOW>;
 			debounce-interval = <10>;
 		};
 
-		volume-down {
-			status = "disabled";
-		};
-
-		volume-up {
-			status = "disabled";
-		};
+		/delete-node/ volume-down;
+		/delete-node/ volume-up;
 	};
 
 	gpio-fan {
