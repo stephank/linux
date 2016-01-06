@@ -25,6 +25,7 @@
 #include <linux/serial_reg.h>
 
 #define UART_SHIFT 2
+#define NO_POLL_CHAR 0x00ff0000
 
 /* Physical addresses */
 #define TEGRA_CLK_RESET_BASE		0x60006000
@@ -171,10 +172,20 @@
  * check to make sure that the UART address is actually valid.
  */
 
+		.macro	recvuart, rd, rx
+		cmp	\rx, #0
+		beq 1001f
+		ldrb	\rd, [\rx, #UART_LSR << UART_SHIFT]
+		and	\rd, \rd, #UART_LSR_DR
+		teq	\rd, #UART_LSR_DR
+		ldreqb	\rd, [\rx, #UART_RX << UART_SHIFT]
+		movne	\rd, #NO_POLL_CHAR
+1001:
+		.endm
+
 		.macro	senduart, rd, rx
 		cmp	\rx, #0
 		strneb	\rd, [\rx, #UART_TX << UART_SHIFT]
-1001:
 		.endm
 
 		.macro	busyuart, rd, rx
