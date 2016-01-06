@@ -100,6 +100,12 @@ ENTRY(printch)
 		b	1b
 ENDPROC(printch)
 
+ENTRY(readch)
+		addruart_current r3, r1, r2
+		recvuart r0, r3
+		ret lr
+ENDPROC(readch)
+
 #ifdef CONFIG_MMU
 ENTRY(debug_ll_addr)
 		addruart r2, r3, ip
