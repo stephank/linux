@@ -53,6 +53,10 @@
 		};
 	};
 
+	gpio: gpio@6000d000 {
+		gpio-ranges = <&pinmux 0 0 248>;
+	};
+
 	serial@70006000 {
 		compatible = "nvidia,tegra30-hsuart";
 		status = "okay";
