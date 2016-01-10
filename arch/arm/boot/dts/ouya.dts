@@ -6,9 +6,15 @@
 	model = "Ouya";
 	compatible = "ouya", "nvidia,cardhu", "nvidia,tegra30";
 
+	/* Already disabled */
+	/delete-node/ usb@7d000000;
+	/delete-node/ usb-phy@7d000000;
+
+	/* Explicitly disabled */
 	/delete-node/ pcie-controller@00003000;
-	/delete-node/ i2c@7000c000;
+	/delete-node/ i2c@7000c000; /* panelddc */
 	/delete-node/ panel;
+	/delete-node/ backlight;
 
 	aliases {
 		serial0 = &uarta;
