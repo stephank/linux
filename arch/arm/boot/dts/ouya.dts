@@ -94,7 +94,6 @@
 	};
 
 	usb-phy@7d004000 {
-		vbus-supply = <&usb1_vbus_reg>;
 		nvidia,hssync-start-delay = <0>;
 		nvidia,xcvr-setup = <15>;
 		nvidia,xcvr-hsslew = <8>;
