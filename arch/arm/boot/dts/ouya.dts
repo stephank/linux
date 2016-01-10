@@ -75,6 +75,11 @@
 		status = "okay";
 	};
 
+	pmc@7000e400 {
+		nvidia,suspend-mode = <0>;
+		nvidia,lp0-vec = <0xbddf9000 8192>;
+	};
+
 	sdhci@78000400 {
 		status = "okay";
 		power-gpios = <&gpio TEGRA_GPIO(D, 4) GPIO_ACTIVE_HIGH>;
