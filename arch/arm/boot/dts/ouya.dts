@@ -69,7 +69,7 @@
 	};
 
 	serial@70006300 {
-		compatible = "nvidia,tegra30-uart";
+		compatible = "nvidia,tegra30-hsuart";
 		status = "okay";
 	};
 
