@@ -16,6 +16,9 @@
 	/delete-node/ panel;
 	/delete-node/ backlight;
 
+	/* FIXME: broken */
+	/delete-node/ cache-controller@50043000;
+
 	aliases {
 		serial0 = &uarta;
 		serial1 = &uartb;
