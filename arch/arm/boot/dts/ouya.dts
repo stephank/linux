@@ -96,6 +96,7 @@
 
 	usb@7d004000 {
 		status = "okay";
+		ouya,smsc-reset-gpio = <&gpio TEGRA_GPIO(DD, 5) GPIO_ACTIVE_HIGH>;
 	};
 
 	usb-phy@7d004000 {
