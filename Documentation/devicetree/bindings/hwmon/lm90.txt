@@ -28,6 +28,13 @@ Required node properties:
 
 - vcc-supply: vcc regulator for the supply voltage.
 
+- #thermal-sensor-cells: Should be 1. See ../../thermal/thermal.txt for a
+                         description of this property. Use the following
+                         values to refer to a specific sensor:
+                         0: chip internal sensor
+                         1: external sensor
+                         2: second external sensor, if present
+
 Optional properties:
 - interrupts: Contains a single interrupt specifier which describes the
               LM90 "-ALERT" pin output.
@@ -81,4 +88,5 @@ temp-sensor {
 	remote-high = <80000>;
 	remote-critical = <90000>;
 	remote-offset = <(-62125)>;
+	#thermal-sensor-cells = <1>;
 }
