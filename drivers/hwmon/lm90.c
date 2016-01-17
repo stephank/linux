@@ -94,6 +94,7 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/sysfs.h>
+#include <linux/thermal.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
 
@@ -205,6 +206,8 @@ enum chips { lm90, adm1032, lm99, lm86, max6657, max6659, adt7461, max6680,
 #define MAX6696_STATUS2_ROT2	(1 << 5) /* remote emergency limit tripped */
 #define MAX6696_STATUS2_R2OT2	(1 << 6) /* remote2 emergency limit tripped */
 #define MAX6696_STATUS2_LOT2	(1 << 7) /* local emergency limit tripped */
+
+#define LM90_NUM_SENSORS(d) (((d)->flags & LM90_HAVE_TEMP3) ? 3 : 2)
 
 /*
  * Driver data (common to all clients)
@@ -364,9 +367,12 @@ enum lm90_temp11_reg_index {
  * Client data (each client gets its own)
  */
 
+struct lm90_sensor;
+
 struct lm90_data {
 	struct i2c_client *client;
 	struct device *hwmon_dev;
+	struct lm90_sensor *sensors;
 	const struct attribute_group *groups[6];
 	struct mutex update_lock;
 	struct regulator *regulator;
@@ -389,6 +395,12 @@ struct lm90_data {
 	s16 temp11[TEMP11_REG_NUM];
 	u8 temp_hyst;
 	u16 alarms; /* bitvector (upper 8 bits for max6695/96) */
+};
+
+struct lm90_sensor {
+	struct lm90_data *data;
+	unsigned int index;
+	struct thermal_zone_device *tz;
 };
 
 /*
@@ -1204,6 +1216,35 @@ static ssize_t sysfs_set_pec(struct device *dev, struct device_attribute *dummy,
 static DEVICE_ATTR(pec, S_IWUSR | S_IRUGO, sysfs_show_pec, sysfs_set_pec);
 
 /*
+ * Thermal zone code
+ */
+
+static int lm90_of_get_temp(void *data, int *out_temp)
+{
+	struct lm90_sensor *sensor = data;
+
+	switch (sensor->index) {
+	case 0:
+		*out_temp = get_temp11(sensor->data, LOCAL_TEMP);
+		break;
+	case 1:
+		*out_temp = get_temp11(sensor->data, REMOTE_TEMP);
+		break;
+	case 2:
+		*out_temp = get_temp11(sensor->data, REMOTE2_TEMP);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static const struct thermal_zone_of_device_ops lm90_of_thermal_ops = {
+	.get_temp = lm90_of_get_temp,
+};
+
+/*
  * Real code
  */
 
@@ -1533,6 +1574,7 @@ static int lm90_probe(struct i2c_client *client,
 	struct regulator *regulator;
 	int groups = 0;
 	int err;
+	unsigned int i;
 
 	regulator = devm_regulator_get(dev, "vcc");
 	if (IS_ERR(regulator))
@@ -1617,6 +1659,23 @@ static int lm90_probe(struct i2c_client *client,
 		}
 	}
 
+	data->sensors = devm_kmalloc_array(dev, LM90_NUM_SENSORS(data),
+					   sizeof(struct lm90_sensor),
+					   GFP_KERNEL);
+	if (!data->sensors) {
+		err = -ENOMEM;
+		goto exit_unregister;
+	}
+	for (i = 0; i < LM90_NUM_SENSORS(data); i++) {
+		data->sensors[i].data = data;
+		data->sensors[i].index = i;
+		data->sensors[i].tz = thermal_zone_of_sensor_register(
+			data->hwmon_dev, i, &data->sensors[i],
+			&lm90_of_thermal_ops);
+		if (IS_ERR(data->sensors[i].tz))
+			data->sensors[i].tz = NULL;
+	}
+
 	return 0;
 
 exit_unregister:
@@ -1633,6 +1692,12 @@ exit_restore:
 static int lm90_remove(struct i2c_client *client)
 {
 	struct lm90_data *data = i2c_get_clientdata(client);
+	unsigned int i;
+
+	for (i = 0; i < LM90_NUM_SENSORS(data); i++) {
+		thermal_zone_of_sensor_unregister(data->hwmon_dev,
+						  data->sensors[i].tz);
+	}
 
 	hwmon_device_unregister(data->hwmon_dev);
 	device_remove_file(&client->dev, &dev_attr_pec);
