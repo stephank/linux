@@ -1532,6 +1532,8 @@ static bool lm90_is_tripped(struct i2c_client *client, u16 *status)
 	if ((st & 0x7f) == 0 && (st2 & 0xfe) == 0)
 		return false;
 
+	/*
+	 * FIXME: Disabled for ouya
 	if ((st & (LM90_STATUS_LLOW | LM90_STATUS_LHIGH | LM90_STATUS_LTHRM)) ||
 	    (st2 & MAX6696_STATUS2_LOT2))
 		dev_warn(&client->dev,
@@ -1550,6 +1552,7 @@ static bool lm90_is_tripped(struct i2c_client *client, u16 *status)
 	if (st2 & MAX6696_STATUS2_R2OPEN)
 		dev_warn(&client->dev,
 			 "temp%d diode open, please check!\n", 3);
+	 */
 
 	return true;
 }
