@@ -513,9 +513,8 @@ static void lm90_set_convrate(struct i2c_client *client, struct lm90_data *data,
 	data->update_interval = DIV_ROUND_CLOSEST(update_interval, 64);
 }
 
-static struct lm90_data *lm90_update_device(struct device *dev)
+static void lm90_update(struct lm90_data *data)
 {
-	struct lm90_data *data = dev_get_drvdata(dev);
 	struct i2c_client *client = data->client;
 	unsigned long next_update;
 
@@ -624,8 +623,6 @@ static struct lm90_data *lm90_update_device(struct device *dev)
 	}
 
 	mutex_unlock(&data->update_lock);
-
-	return data;
 }
 
 /*
@@ -755,32 +752,59 @@ static u16 temp_to_u16_adt7461(struct lm90_data *data, long val)
 	}
 }
 
+static int get_temp8(struct lm90_data *data, int index)
+{
+	int temp;
+
+	lm90_update(data);
+
+	if (data->kind == adt7461 || data->kind == tmp451)
+		temp = temp_from_u8_adt7461(data, data->temp8[index]);
+	else if (data->kind == max6646)
+		temp = temp_from_u8(data->temp8[index]);
+	else
+		temp = temp_from_s8(data->temp8[index]);
+
+	/* +16 degrees offset for temp2 for the LM99 */
+	if (data->kind == lm99 && index == 3)
+		temp += 16000;
+
+	return temp;
+}
+
+static int get_temp11(struct lm90_data *data, int index)
+{
+	int temp;
+
+	lm90_update(data);
+
+	if (data->kind == adt7461 || data->kind == tmp451)
+		temp = temp_from_u16_adt7461(data, data->temp11[index]);
+	else if (data->kind == max6646)
+		temp = temp_from_u16(data->temp11[index]);
+	else
+		temp = temp_from_s16(data->temp11[index]);
+
+	/* +16 degrees offset for temp2 for the LM99 */
+	if (data->kind == lm99 && index <= 2)
+		temp += 16000;
+
+	return temp;
+}
+
 /*
  * Sysfs stuff
  */
 
-static ssize_t show_temp8(struct device *dev, struct device_attribute *devattr,
+static ssize_t sysfs_show_temp8(struct device *dev, struct device_attribute *devattr,
 			  char *buf)
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
-	struct lm90_data *data = lm90_update_device(dev);
-	int temp;
-
-	if (data->kind == adt7461 || data->kind == tmp451)
-		temp = temp_from_u8_adt7461(data, data->temp8[attr->index]);
-	else if (data->kind == max6646)
-		temp = temp_from_u8(data->temp8[attr->index]);
-	else
-		temp = temp_from_s8(data->temp8[attr->index]);
-
-	/* +16 degrees offset for temp2 for the LM99 */
-	if (data->kind == lm99 && attr->index == 3)
-		temp += 16000;
-
-	return sprintf(buf, "%d\n", temp);
+	struct lm90_data *data = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", get_temp8(data, attr->index));
 }
 
-static ssize_t set_temp8(struct device *dev, struct device_attribute *devattr,
+static ssize_t sysfs_set_temp8(struct device *dev, struct device_attribute *devattr,
 			 const char *buf, size_t count)
 {
 	static const u8 reg[TEMP8_REG_NUM] = {
@@ -825,28 +849,15 @@ static ssize_t set_temp8(struct device *dev, struct device_attribute *devattr,
 	return count;
 }
 
-static ssize_t show_temp11(struct device *dev, struct device_attribute *devattr,
+static ssize_t sysfs_show_temp11(struct device *dev, struct device_attribute *devattr,
 			   char *buf)
 {
 	struct sensor_device_attribute_2 *attr = to_sensor_dev_attr_2(devattr);
-	struct lm90_data *data = lm90_update_device(dev);
-	int temp;
-
-	if (data->kind == adt7461 || data->kind == tmp451)
-		temp = temp_from_u16_adt7461(data, data->temp11[attr->index]);
-	else if (data->kind == max6646)
-		temp = temp_from_u16(data->temp11[attr->index]);
-	else
-		temp = temp_from_s16(data->temp11[attr->index]);
-
-	/* +16 degrees offset for temp2 for the LM99 */
-	if (data->kind == lm99 &&  attr->index <= 2)
-		temp += 16000;
-
-	return sprintf(buf, "%d\n", temp);
+	struct lm90_data *data = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", get_temp11(data, attr->index));
 }
 
-static ssize_t set_temp11(struct device *dev, struct device_attribute *devattr,
+static ssize_t sysfs_set_temp11(struct device *dev, struct device_attribute *devattr,
 			  const char *buf, size_t count)
 {
 	struct {
@@ -899,13 +910,15 @@ static ssize_t set_temp11(struct device *dev, struct device_attribute *devattr,
 	return count;
 }
 
-static ssize_t show_temphyst(struct device *dev,
+static ssize_t sysfs_show_temphyst(struct device *dev,
 			     struct device_attribute *devattr,
 			     char *buf)
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
-	struct lm90_data *data = lm90_update_device(dev);
+	struct lm90_data *data = dev_get_drvdata(dev);
 	int temp;
+
+	lm90_update(data);
 
 	if (data->kind == adt7461 || data->kind == tmp451)
 		temp = temp_from_u8_adt7461(data, data->temp8[attr->index]);
@@ -921,7 +934,7 @@ static ssize_t show_temphyst(struct device *dev,
 	return sprintf(buf, "%d\n", temp - temp_from_s8(data->temp_hyst));
 }
 
-static ssize_t set_temphyst(struct device *dev, struct device_attribute *dummy,
+static ssize_t sysfs_set_temphyst(struct device *dev, struct device_attribute *dummy,
 			    const char *buf, size_t count)
 {
 	struct lm90_data *data = dev_get_drvdata(dev);
@@ -949,24 +962,29 @@ static ssize_t set_temphyst(struct device *dev, struct device_attribute *dummy,
 	return count;
 }
 
-static ssize_t show_alarms(struct device *dev, struct device_attribute *dummy,
+static ssize_t sysfs_show_alarms(struct device *dev, struct device_attribute *dummy,
 			   char *buf)
 {
-	struct lm90_data *data = lm90_update_device(dev);
+	struct lm90_data *data = dev_get_drvdata(dev);
+
+	lm90_update(data);
+
 	return sprintf(buf, "%d\n", data->alarms);
 }
 
-static ssize_t show_alarm(struct device *dev, struct device_attribute
+static ssize_t sysfs_show_alarm(struct device *dev, struct device_attribute
 			  *devattr, char *buf)
 {
 	struct sensor_device_attribute *attr = to_sensor_dev_attr(devattr);
-	struct lm90_data *data = lm90_update_device(dev);
+	struct lm90_data *data = dev_get_drvdata(dev);
 	int bitnr = attr->index;
+
+	lm90_update(data);
 
 	return sprintf(buf, "%d\n", (data->alarms >> bitnr) & 1);
 }
 
-static ssize_t show_update_interval(struct device *dev,
+static ssize_t sysfs_show_update_interval(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct lm90_data *data = dev_get_drvdata(dev);
@@ -974,7 +992,7 @@ static ssize_t show_update_interval(struct device *dev,
 	return sprintf(buf, "%u\n", data->update_interval);
 }
 
-static ssize_t set_update_interval(struct device *dev,
+static ssize_t sysfs_set_update_interval(struct device *dev,
 				   struct device_attribute *attr,
 				   const char *buf, size_t count)
 {
@@ -994,42 +1012,42 @@ static ssize_t set_update_interval(struct device *dev,
 	return count;
 }
 
-static SENSOR_DEVICE_ATTR_2(temp1_input, S_IRUGO, show_temp11, NULL,
+static SENSOR_DEVICE_ATTR_2(temp1_input, S_IRUGO, sysfs_show_temp11, NULL,
 	0, LOCAL_TEMP);
-static SENSOR_DEVICE_ATTR_2(temp2_input, S_IRUGO, show_temp11, NULL,
+static SENSOR_DEVICE_ATTR_2(temp2_input, S_IRUGO, sysfs_show_temp11, NULL,
 	0, REMOTE_TEMP);
-static SENSOR_DEVICE_ATTR(temp1_min, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, LOCAL_LOW);
-static SENSOR_DEVICE_ATTR_2(temp2_min, S_IWUSR | S_IRUGO, show_temp11,
-	set_temp11, 0, REMOTE_LOW);
-static SENSOR_DEVICE_ATTR(temp1_max, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, LOCAL_HIGH);
-static SENSOR_DEVICE_ATTR_2(temp2_max, S_IWUSR | S_IRUGO, show_temp11,
-	set_temp11, 1, REMOTE_HIGH);
-static SENSOR_DEVICE_ATTR(temp1_crit, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, LOCAL_CRIT);
-static SENSOR_DEVICE_ATTR(temp2_crit, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, REMOTE_CRIT);
-static SENSOR_DEVICE_ATTR(temp1_crit_hyst, S_IWUSR | S_IRUGO, show_temphyst,
-	set_temphyst, LOCAL_CRIT);
-static SENSOR_DEVICE_ATTR(temp2_crit_hyst, S_IRUGO, show_temphyst, NULL,
+static SENSOR_DEVICE_ATTR(temp1_min, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, LOCAL_LOW);
+static SENSOR_DEVICE_ATTR_2(temp2_min, S_IWUSR | S_IRUGO, sysfs_show_temp11,
+	sysfs_set_temp11, 0, REMOTE_LOW);
+static SENSOR_DEVICE_ATTR(temp1_max, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, LOCAL_HIGH);
+static SENSOR_DEVICE_ATTR_2(temp2_max, S_IWUSR | S_IRUGO, sysfs_show_temp11,
+	sysfs_set_temp11, 1, REMOTE_HIGH);
+static SENSOR_DEVICE_ATTR(temp1_crit, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, LOCAL_CRIT);
+static SENSOR_DEVICE_ATTR(temp2_crit, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, REMOTE_CRIT);
+static SENSOR_DEVICE_ATTR(temp1_crit_hyst, S_IWUSR | S_IRUGO, sysfs_show_temphyst,
+	sysfs_set_temphyst, LOCAL_CRIT);
+static SENSOR_DEVICE_ATTR(temp2_crit_hyst, S_IRUGO, sysfs_show_temphyst, NULL,
 	REMOTE_CRIT);
-static SENSOR_DEVICE_ATTR_2(temp2_offset, S_IWUSR | S_IRUGO, show_temp11,
-	set_temp11, 2, REMOTE_OFFSET);
+static SENSOR_DEVICE_ATTR_2(temp2_offset, S_IWUSR | S_IRUGO, sysfs_show_temp11,
+	sysfs_set_temp11, 2, REMOTE_OFFSET);
 
 /* Individual alarm files */
-static SENSOR_DEVICE_ATTR(temp1_crit_alarm, S_IRUGO, show_alarm, NULL, 0);
-static SENSOR_DEVICE_ATTR(temp2_crit_alarm, S_IRUGO, show_alarm, NULL, 1);
-static SENSOR_DEVICE_ATTR(temp2_fault, S_IRUGO, show_alarm, NULL, 2);
-static SENSOR_DEVICE_ATTR(temp2_min_alarm, S_IRUGO, show_alarm, NULL, 3);
-static SENSOR_DEVICE_ATTR(temp2_max_alarm, S_IRUGO, show_alarm, NULL, 4);
-static SENSOR_DEVICE_ATTR(temp1_min_alarm, S_IRUGO, show_alarm, NULL, 5);
-static SENSOR_DEVICE_ATTR(temp1_max_alarm, S_IRUGO, show_alarm, NULL, 6);
+static SENSOR_DEVICE_ATTR(temp1_crit_alarm, S_IRUGO, sysfs_show_alarm, NULL, 0);
+static SENSOR_DEVICE_ATTR(temp2_crit_alarm, S_IRUGO, sysfs_show_alarm, NULL, 1);
+static SENSOR_DEVICE_ATTR(temp2_fault, S_IRUGO, sysfs_show_alarm, NULL, 2);
+static SENSOR_DEVICE_ATTR(temp2_min_alarm, S_IRUGO, sysfs_show_alarm, NULL, 3);
+static SENSOR_DEVICE_ATTR(temp2_max_alarm, S_IRUGO, sysfs_show_alarm, NULL, 4);
+static SENSOR_DEVICE_ATTR(temp1_min_alarm, S_IRUGO, sysfs_show_alarm, NULL, 5);
+static SENSOR_DEVICE_ATTR(temp1_max_alarm, S_IRUGO, sysfs_show_alarm, NULL, 6);
 /* Raw alarm file for compatibility */
-static DEVICE_ATTR(alarms, S_IRUGO, show_alarms, NULL);
+static DEVICE_ATTR(alarms, S_IRUGO, sysfs_show_alarms, NULL);
 
-static DEVICE_ATTR(update_interval, S_IRUGO | S_IWUSR, show_update_interval,
-		   set_update_interval);
+static DEVICE_ATTR(update_interval, S_IRUGO | S_IWUSR, sysfs_show_update_interval,
+		   sysfs_set_update_interval);
 
 static struct attribute *lm90_attributes[] = {
 	&sensor_dev_attr_temp1_input.dev_attr.attr,
@@ -1071,13 +1089,13 @@ static const struct attribute_group lm90_temp2_offset_group = {
 /*
  * Additional attributes for devices with emergency sensors
  */
-static SENSOR_DEVICE_ATTR(temp1_emergency, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, LOCAL_EMERG);
-static SENSOR_DEVICE_ATTR(temp2_emergency, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, REMOTE_EMERG);
-static SENSOR_DEVICE_ATTR(temp1_emergency_hyst, S_IRUGO, show_temphyst,
+static SENSOR_DEVICE_ATTR(temp1_emergency, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, LOCAL_EMERG);
+static SENSOR_DEVICE_ATTR(temp2_emergency, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, REMOTE_EMERG);
+static SENSOR_DEVICE_ATTR(temp1_emergency_hyst, S_IRUGO, sysfs_show_temphyst,
 			  NULL, LOCAL_EMERG);
-static SENSOR_DEVICE_ATTR(temp2_emergency_hyst, S_IRUGO, show_temphyst,
+static SENSOR_DEVICE_ATTR(temp2_emergency_hyst, S_IRUGO, sysfs_show_temphyst,
 			  NULL, REMOTE_EMERG);
 
 static struct attribute *lm90_emergency_attributes[] = {
@@ -1092,8 +1110,8 @@ static const struct attribute_group lm90_emergency_group = {
 	.attrs = lm90_emergency_attributes,
 };
 
-static SENSOR_DEVICE_ATTR(temp1_emergency_alarm, S_IRUGO, show_alarm, NULL, 15);
-static SENSOR_DEVICE_ATTR(temp2_emergency_alarm, S_IRUGO, show_alarm, NULL, 13);
+static SENSOR_DEVICE_ATTR(temp1_emergency_alarm, S_IRUGO, sysfs_show_alarm, NULL, 15);
+static SENSOR_DEVICE_ATTR(temp2_emergency_alarm, S_IRUGO, sysfs_show_alarm, NULL, 13);
 
 static struct attribute *lm90_emergency_alarm_attributes[] = {
 	&sensor_dev_attr_temp1_emergency_alarm.dev_attr.attr,
@@ -1108,26 +1126,26 @@ static const struct attribute_group lm90_emergency_alarm_group = {
 /*
  * Additional attributes for devices with 3 temperature sensors
  */
-static SENSOR_DEVICE_ATTR_2(temp3_input, S_IRUGO, show_temp11, NULL,
+static SENSOR_DEVICE_ATTR_2(temp3_input, S_IRUGO, sysfs_show_temp11, NULL,
 	0, REMOTE2_TEMP);
-static SENSOR_DEVICE_ATTR_2(temp3_min, S_IWUSR | S_IRUGO, show_temp11,
-	set_temp11, 3, REMOTE2_LOW);
-static SENSOR_DEVICE_ATTR_2(temp3_max, S_IWUSR | S_IRUGO, show_temp11,
-	set_temp11, 4, REMOTE2_HIGH);
-static SENSOR_DEVICE_ATTR(temp3_crit, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, REMOTE2_CRIT);
-static SENSOR_DEVICE_ATTR(temp3_crit_hyst, S_IRUGO, show_temphyst, NULL,
+static SENSOR_DEVICE_ATTR_2(temp3_min, S_IWUSR | S_IRUGO, sysfs_show_temp11,
+	sysfs_set_temp11, 3, REMOTE2_LOW);
+static SENSOR_DEVICE_ATTR_2(temp3_max, S_IWUSR | S_IRUGO, sysfs_show_temp11,
+	sysfs_set_temp11, 4, REMOTE2_HIGH);
+static SENSOR_DEVICE_ATTR(temp3_crit, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, REMOTE2_CRIT);
+static SENSOR_DEVICE_ATTR(temp3_crit_hyst, S_IRUGO, sysfs_show_temphyst, NULL,
 	REMOTE2_CRIT);
-static SENSOR_DEVICE_ATTR(temp3_emergency, S_IWUSR | S_IRUGO, show_temp8,
-	set_temp8, REMOTE2_EMERG);
-static SENSOR_DEVICE_ATTR(temp3_emergency_hyst, S_IRUGO, show_temphyst,
+static SENSOR_DEVICE_ATTR(temp3_emergency, S_IWUSR | S_IRUGO, sysfs_show_temp8,
+	sysfs_set_temp8, REMOTE2_EMERG);
+static SENSOR_DEVICE_ATTR(temp3_emergency_hyst, S_IRUGO, sysfs_show_temphyst,
 			  NULL, REMOTE2_EMERG);
 
-static SENSOR_DEVICE_ATTR(temp3_crit_alarm, S_IRUGO, show_alarm, NULL, 9);
-static SENSOR_DEVICE_ATTR(temp3_fault, S_IRUGO, show_alarm, NULL, 10);
-static SENSOR_DEVICE_ATTR(temp3_min_alarm, S_IRUGO, show_alarm, NULL, 11);
-static SENSOR_DEVICE_ATTR(temp3_max_alarm, S_IRUGO, show_alarm, NULL, 12);
-static SENSOR_DEVICE_ATTR(temp3_emergency_alarm, S_IRUGO, show_alarm, NULL, 14);
+static SENSOR_DEVICE_ATTR(temp3_crit_alarm, S_IRUGO, sysfs_show_alarm, NULL, 9);
+static SENSOR_DEVICE_ATTR(temp3_fault, S_IRUGO, sysfs_show_alarm, NULL, 10);
+static SENSOR_DEVICE_ATTR(temp3_min_alarm, S_IRUGO, sysfs_show_alarm, NULL, 11);
+static SENSOR_DEVICE_ATTR(temp3_max_alarm, S_IRUGO, sysfs_show_alarm, NULL, 12);
+static SENSOR_DEVICE_ATTR(temp3_emergency_alarm, S_IRUGO, sysfs_show_alarm, NULL, 14);
 
 static struct attribute *lm90_temp3_attributes[] = {
 	&sensor_dev_attr_temp3_input.dev_attr.attr,
@@ -1151,14 +1169,14 @@ static const struct attribute_group lm90_temp3_group = {
 };
 
 /* pec used for ADM1032 only */
-static ssize_t show_pec(struct device *dev, struct device_attribute *dummy,
+static ssize_t sysfs_show_pec(struct device *dev, struct device_attribute *dummy,
 			char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	return sprintf(buf, "%d\n", !!(client->flags & I2C_CLIENT_PEC));
 }
 
-static ssize_t set_pec(struct device *dev, struct device_attribute *dummy,
+static ssize_t sysfs_set_pec(struct device *dev, struct device_attribute *dummy,
 		       const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -1183,7 +1201,7 @@ static ssize_t set_pec(struct device *dev, struct device_attribute *dummy,
 	return count;
 }
 
-static DEVICE_ATTR(pec, S_IWUSR | S_IRUGO, show_pec, set_pec);
+static DEVICE_ATTR(pec, S_IWUSR | S_IRUGO, sysfs_show_pec, sysfs_set_pec);
 
 /*
  * Real code
