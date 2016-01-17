@@ -95,6 +95,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/sysfs.h>
+#include <linux/thermal.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
 
@@ -206,6 +207,8 @@ enum chips { lm90, adm1032, lm99, lm86, max6657, max6659, adt7461, max6680,
 #define MAX6696_STATUS2_ROT2	(1 << 5) /* remote emergency limit tripped */
 #define MAX6696_STATUS2_R2OT2	(1 << 6) /* remote2 emergency limit tripped */
 #define MAX6696_STATUS2_LOT2	(1 << 7) /* local emergency limit tripped */
+
+#define LM90_NUM_SENSORS(d) (((d)->flags & LM90_HAVE_TEMP3) ? 3 : 2)
 
 /*
  * Driver data (common to all clients)
@@ -365,6 +368,13 @@ enum lm90_temp11_reg_index {
  * Client data (each client gets its own)
  */
 
+struct lm90_sensor {
+	struct lm90_data *data;
+	int index;
+
+	struct thermal_zone_device *tz;
+};
+
 struct lm90_data {
 	struct i2c_client *client;
 	struct device *hwmon_dev;
@@ -390,6 +400,10 @@ struct lm90_data {
 	s16 temp11[TEMP11_REG_NUM];
 	u8 temp_hyst;
 	u16 alarms; /* bitvector (upper 8 bits for max6695/96) */
+
+#ifdef CONFIG_THERMAL_OF
+	struct lm90_sensor sensors[3];
+#endif
 };
 
 /*
@@ -1270,6 +1284,23 @@ static DEVICE_ATTR(pec, S_IWUSR | S_IRUGO,
 	lm90_sysfs_show_pec, lm90_sysfs_set_pec);
 
 /*
+ * Thermal zone code
+ */
+
+#ifdef CONFIG_THERMAL_OF
+static int lm90_of_get_temp(void *data, int *out_temp)
+{
+	struct lm90_sensor *sensor = data;
+	*out_temp = lm90_get_temp11(sensor->data, sensor->index);
+	return 0;
+}
+
+static const struct thermal_zone_of_device_ops lm90_of_thermal_ops = {
+	.get_temp = lm90_of_get_temp,
+};
+#endif
+
+/*
  * Real code
  */
 
@@ -1646,6 +1677,7 @@ static int lm90_probe(struct i2c_client *client,
 	struct regulator *regulator;
 	int groups = 0;
 	int err;
+	unsigned int i;
 
 	regulator = devm_regulator_get(dev, "vcc");
 	if (IS_ERR(regulator))
@@ -1730,6 +1762,20 @@ static int lm90_probe(struct i2c_client *client,
 		}
 	}
 
+#ifdef CONFIG_THERMAL_OF
+	data->sensors[0].index = LOCAL_TEMP;
+	data->sensors[1].index = REMOTE_TEMP;
+	data->sensors[2].index = REMOTE2_TEMP;
+	for (i = 0; i < LM90_NUM_SENSORS(data); i++) {
+		data->sensors[i].data = data;
+		data->sensors[i].tz = thermal_zone_of_sensor_register(
+			dev, i, &data->sensors[i],
+			&lm90_of_thermal_ops);
+		if (IS_ERR(data->sensors[i].tz))
+			data->sensors[i].tz = NULL;
+	}
+#endif
+
 	return 0;
 
 exit_unregister:
@@ -1746,6 +1792,14 @@ exit_restore:
 static int lm90_remove(struct i2c_client *client)
 {
 	struct lm90_data *data = i2c_get_clientdata(client);
+#ifdef CONFIG_THERMAL_OF
+	unsigned int i;
+
+	for (i = 0; i < LM90_NUM_SENSORS(data); i++) {
+		thermal_zone_of_sensor_unregister(&client->dev,
+						  data->sensors[i].tz);
+	}
+#endif
 
 	hwmon_device_unregister(data->hwmon_dev);
 	device_remove_file(&client->dev, &dev_attr_pec);
