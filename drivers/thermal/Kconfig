@@ -75,6 +75,14 @@ config THERMAL_DEFAULT_GOV_FAIR_SHARE
 	  devices based on their 'contribution' to a zone. The
 	  contribution should be provided through platform data.
 
+config THERMAL_DEFAULT_GOV_BANG_BANG
+	bool "bang_bang"
+	select THERMAL_GOV_BANG_BANG
+	help
+	  Use the bang_bang governor as default. This governor sets the device
+	  to its highest state when the zone trips, and returns to the lowest
+	  state based hysteresis.
+
 config THERMAL_DEFAULT_GOV_USER_SPACE
 	bool "user_space"
 	select THERMAL_GOV_USER_SPACE
