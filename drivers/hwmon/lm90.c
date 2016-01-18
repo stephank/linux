@@ -93,6 +93,7 @@
 #include <linux/hwmon.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/sysfs.h>
 #include <linux/interrupt.h>
 #include <linux/regulator/consumer.h>
@@ -1499,8 +1500,14 @@ static void lm90_restore_conf(struct i2c_client *client, struct lm90_data *data)
 static void lm90_init_client(struct lm90_data *data)
 {
 	struct i2c_client *client = data->client;
+	struct device *dev = &client->dev;
 	u8 config, convrate;
+	u32 ms;
+	s32 temp;
 
+	/*
+	 * Save old conversion rate.
+	 */
 	if (lm90_read_reg(client, LM90_REG_R_CONVRATE, &convrate) < 0) {
 		dev_warn(&client->dev, "Failed to read convrate register!\n");
 		convrate = LM90_DEF_CONVRATE_RVAL;
@@ -1510,14 +1517,24 @@ static void lm90_init_client(struct lm90_data *data)
 	/*
 	 * Start the conversions.
 	 */
-	lm90_set_convrate_locked(data, 500);  /* 500ms / 2Hz  */
+#ifdef CONFIG_OF
+	if (of_property_read_u32(dev->of_node, "update-interval", &ms) < 0)
+#endif
+		ms = 500;  /* default rate: 2Hz */
+	lm90_set_convrate_locked(data, ms);
+
+	/*
+	 * Save old config
+	 */
 	if (lm90_read_reg(client, LM90_REG_R_CONFIG1, &config) < 0) {
-		dev_warn(&client->dev, "Initialization failed!\n");
+		dev_warn(dev, "Initialization failed!\n");
 		return;
 	}
 	data->config_orig = config;
 
-	/* Check Temperature Range Select */
+	/*
+	 * Check Temperature Range Select
+	 */
 	if (data->kind == adt7461 || data->kind == tmp451) {
 		if (config & 0x04)
 			data->flags |= LM90_FLAG_ADT7461_EXT;
@@ -1540,6 +1557,36 @@ static void lm90_init_client(struct lm90_data *data)
 	config &= 0xBF;	/* run */
 	if (config != data->config_orig) /* Only write if changed */
 		i2c_smbus_write_byte_data(client, LM90_REG_W_CONFIG1, config);
+
+#ifdef CONFIG_OF
+	/*
+	 * Set initial values from devicetree
+	 */
+#define INIT_REG(_property, _index, _bits) { \
+	if (of_property_read_s32(dev->of_node, _property, &temp) == 0) \
+		lm90_set_temp##_bits##_locked(data, _index, temp); \
+}
+	INIT_REG("local-low", LOCAL_LOW, 8);
+	INIT_REG("local-high", LOCAL_HIGH, 8);
+	INIT_REG("local-critical", LOCAL_CRIT, 8);
+	INIT_REG("remote-low", REMOTE_LOW, 11);
+	INIT_REG("remote-high", REMOTE_HIGH, 11);
+	INIT_REG("remote-critical", REMOTE_CRIT, 8);
+	if (data->flags & LM90_HAVE_OFFSET) {
+		INIT_REG("remote-offset", REMOTE_OFFSET, 11);
+	}
+	if (data->flags & LM90_HAVE_EMERGENCY) {
+		INIT_REG("local-emergency", LOCAL_EMERG, 8);
+		INIT_REG("remote-emergency", REMOTE_EMERG, 8);
+	}
+	if (data->flags & LM90_HAVE_TEMP3) {
+		INIT_REG("remote2-low", REMOTE2_LOW, 11);
+		INIT_REG("remote2-high", REMOTE2_HIGH, 11);
+		INIT_REG("remote2-critical", REMOTE2_CRIT, 8);
+		INIT_REG("remote2-emergency", REMOTE2_EMERG, 8);
+	}
+#undef INIT_REG
+#endif
 }
 
 static bool lm90_is_tripped(struct i2c_client *client, u16 *status)
